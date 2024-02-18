@@ -1,0 +1,12 @@
+<config>
+	<system>
+		<token>XXXXXXXXXX:token_token_token_token_token</token>
+		<users>111111111, 2222222222</users>
+	</system>
+		<tasks>
+		<task name="Посмотреть пароль LAPS" shit="1"></task>
+		<task name="Разблокировать пользователя со сбросом пароля" shit="2"></task>
+		<task name="Сделать заявку в ОМНИ"  shit="3"></task>
+		<task name="Пинг"  shit="4"></task>
+	</tasks>
+</config>

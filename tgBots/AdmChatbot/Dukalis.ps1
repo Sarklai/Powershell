@@ -1,453 +1,937 @@
 ﻿$token = "XXXXXXXXX:token_token_token_token_token" #Токен бота
-$timeout = 3
 $chat_id = "-XXXXXXXXXX" #ИД чата
-$i = 0
-$photo = "https://ie.wampi.ru/2022/10/21/quickpicQR.jpg"
-$URL_get = "https://api.telegram.org/bot$token/getUpdates"
-$URL_set = "https://api.telegram.org/bot$token/sendMessage"
-$URL_photo = "https://api.telegram.org/bot$token/sendPhoto"
-$URL_document = "https://api.telegram.org/bot$token/sendDocment"
+$masternick = "tg_username" #ТГ юзернейм для расширенного функционала
 
-function getUpdates($URL)
+#Данные для работы с OMNITRACKER
+$strServerName = "srvHostname" 
+$strServerPort = 5085
+$strLoginName = "login"
+$strPassWd = "password"
+
+
+# API функции
+
+
+# Отправить текстовое сообщение
+function SendMessage($chatID, $text)
 {
-    $json = Invoke-RestMethod -Uri $URL
-    $data = $json.result | Select-Object -Last 1
-    # Обнуляем переменные
-    $text = $null
-    $callback_data = $null
+    $url = "https://api.telegram.org/bot$token/sendMessage"
+    $params = @{
+                    chat_id = $chatID
+                    text = $text
+                    parse_mode = "Markdown"
+                }
 
-    # Обычное сообщение
-    if($data.message)
+    $response = Invoke-RestMethod -Uri $url -Method POST -Body $params
+    return $response.result.message_id
+}
+
+
+# Отредактировать отправленное сообщение по ID
+function EditMessage($chatID, $messageID, $text)
+{
+    $url = "https://api.telegram.org/bot$token/editMessageText"
+    $params = @{
+                    chat_id = $chatID
+                    message_id = $messageID
+                    text = $text
+                    parse_mode = "Markdown"
+                }
+
+    Invoke-RestMethod -Uri $url -Method POST -Body $params | Out-Null
+}
+
+
+# Проверить существует сообщение или нет
+function CheckMessageExistence($chatID, $messageID)
+{
+    $url = "https://api.telegram.org/bot$token/getUpdates"
+    $response = Invoke-RestMethod -Uri $url -Method GET
+    
+    foreach ($update in $response.result)
     {
-        $text = $data.message.text
-        $f_name = $data.message.chat.first_name
-        $l_name = $data.message.chat.last_name
-        $username = $data.message.chat.username
-    }
-    
-    $ht = @{}
-    $ht["text"] = $text
-    $ht["f_name"] = $f_name
-    $ht["l_name"] = $l_name
-    $ht["username"] = $username
-
-    # confirm
-    Invoke-RestMethod "$($URL)?offset=$($($data.update_id)+1)" -Method Get | Out-Null
-    
-    return $ht
-}
-<# Упрощенная отправка сообщений, отказался т.к. сам не до конца вдуплил API документацию, пока что юзаю вариант ниже, стащил со статьи HABR
-function sendMessage($text)
-{
-    $chat_id = "-1001796872519"
-    $text
-    $URI = "https://api.telegram.org/bot" + $token + "/sendMessage?chat_id=" + $chat_id + "&text=" + $text
-
-    Invoke-WebRequest -URI ($URI)
-}#>
-
-function sendMessage($URL, $chat_id, $text)
-{
-    # создаем HashTable, можно объявлять ее и таким способом
-    $ht = @{
-        text = $text
-        parse_mode = "Markdown"
-        chat_id = $chat_id
-            }
-    # В доке сказано что надо передавать данные в JSON.. ну ок.
-    $json = $ht | ConvertTo-Json
-    Invoke-RestMethod $URL -Method Post -ContentType 'application/json; charset=utf-8' -Body $json | Out-Null
-}
-
-function sendPhoto
-{
-    Invoke-Webrequest -Uri "https://api.telegram.org/bot$token/sendPhoto?chat_id=$chat_id&caption=Скачать QuickPic&photo=https://ie.wampi.ru/2022/10/21/quickpicQR.jpg" | Out-Null #Тестово, с внешнего адреса.
-}
-
-function sendDocument($URL, $chat_id, $documentObject)
-{
-    # создаем HashTable, можно объявлять ее и таким способом
-    $ht = @{
-        document = $documentObject
-        parse_mode = "Markdown"
-        chat_id = $chat_id
-            }
-    # Данные нужно отправлять в формате json
-    $json = $ht | ConvertTo-Json
-    Invoke-RestMethod $URL -Method Post -ContentType 'application/json; charset=utf-8' -Body $json | Out-Null
-}
-
-# ---------------- НАЧАЛО ----------------
-
-while($true) # вечный цикл
-{
-    $return = getUpdates $URL_get
-
-
-
-
-
-    if ($return.text -like 'PCINFO*') {
-    $comp = $($return.text) -replace "PCINFO ",""
-    Write-Host $comp
-    if (Test-Connection $comp -Quiet -Count 1) {
-    sendMessage $URL_set $chat_id "Нашел и опрашиваю $comp. Может занять пару минут... "
-        $res = Invoke-Command –ComputerName $comp –ScriptBlock {
-            $serialNumber = ""
-            $Mon = @()
-            $MonINFO = @()
-            $currentUser = ""
-            $processor = ""
-            $ramCapacity = ""
-            $storageType = ""
-            $diskinfo = @()
-            $lastBootTime = ""
-            $MG=""
-            $storage = Get-PhysicalDisk 
-                 $diskinfo = @()
-                 foreach ($disk in $storage) {
-                    $storageType = $disk.MediaType
-                    $diskSize = [math]::Round(($disk.Size / 1GB), 2)
-                    $diskinfo += "$storageType $diskSize GB"
-                    }
-            $usedSpaceC = Get-WmiObject Win32_LogicalDisk | Where-Object {$_.DeviceID -eq "C:"} | Select-Object -ExpandProperty FreeSpace
-            $usedSpaceD = Get-WmiObject Win32_LogicalDisk | Where-Object {$_.DeviceID -eq "D:"} | Select-Object -ExpandProperty FreeSpace
-            $usedSpaceCInGB = [math]::Round($usedSpaceC / 1GB, 2)
-            $usedSpaceDInGB = [math]::Round($usedSpaceD / 1GB, 2)
-
-
-            # UPTIME
-            $lastBootTime = (Get-CimInstance Win32_OperatingSystem | Select-Object -ExpandProperty LastBootUpTime)
-            $uptime = (Get-Date) - $lastBootTime
-            $uptimeFormatted = "{0} days, {1} hours, {2} minitus, {3} seconds" -f $uptime.Days, $uptime.Hours, $uptime.Minutes, $uptime.Seconds
-            
-            #RAM SLOTS
-            $ram = Get-CimInstance Win32_PhysicalMemory | Measure-Object Capacity -Sum
-            $ramCapacity = [math]::Round($ram.Sum / 1GB, 2)
-            $ramSlotsUsed = Get-WmiObject -Class Win32_PhysicalMemory | Where-Object {$_.BankLabel -ne ""} | Measure-Object | Select-Object -ExpandProperty Count
-            
-            # Получите серийный номер компьютера
-            $serialNumber = Get-CimInstance Win32_BIOS | Select-Object -ExpandProperty SerialNumber
-
-
-            $Mgeneration = Get-WmiObject Win32_PhysicalMemory | Select-Object SMBIOSMemoryType, FormFactor
-          
-if ($Mgeneration.SMBIOSMemoryType -eq 26) {
-    $MemoryType = "DDR4"
-} elseif ($Mgeneration.SMBIOSMemoryType -eq 24) {
-    $MemoryType = "DDR3"
-}
-
-if ($Mgeneration.FormFactor -eq 12) {
-    $FormFactor = "SODIMM"
-} elseif ($Mgeneration.FormFactor -eq 8) {
-    $FormFactor = "DIMM"
-}
-$MG= "$FormFactor $MemoryType"
-
-
-
-            # Получите имя текущего пользователя
-            $currentUser = Get-WmiObject Win32_ComputerSystem | Select-Object -ExpandProperty UserName
-
-            # Получите модель процессора
-            $processor = Get-CimInstance Win32_Processor | Select-Object -ExpandProperty Name
-            $macAddress = (Get-NetAdapter | Where-Object {$_.Status -eq 'Up'}).MacAddress
-            $devices = Get-PnpDevice | Where-Object {$_.Status -eq 'OK' -and $_.Class -eq 'Monitor'}
-            $Mon = @()
-            foreach ($device in $devices) {
-                $deviceId = $device.InstanceId
-                $monitor = "HKLM:\SYSTEM\CurrentControlSet\Enum\$deviceId"
-                $monitorIdSubkey = Join-Path -Path $monitor -ChildPath 'Device Parameters'
-
-                if (Test-Path -Path $monitorIdSubkey) {
-                    # Проверка наличия параметра EDID
-                    if (Get-ItemProperty -Path $monitorIdSubkey -Name EDID -ErrorAction SilentlyContinue) {
-                        $edidBytes = Get-ItemProperty -Path $monitorIdSubkey -Name EDID | Select-Object -ExpandProperty EDID
-                        $edidString = [System.BitConverter]::ToString($edidBytes)
-
-                       $startIndex = $edidString.IndexOf("00-00-00-FF-00-")
-if ($startIndex -ne -1) {
-    $startIndex += 15
-    $endIndex = $edidString.IndexOf("-0", $startIndex)
-    if ($endIndex -ne -1) {
-        $serialNumberHex = $edidString.Substring($startIndex, $endIndex - $startIndex).Replace("-", "")
-        $monserialNumber = ""
-        for ($i = 0; $i -lt $serialNumberHex.Length; $i += 2) {
-            $hexByte = $serialNumberHex.Substring($i, 2)
-            $asciiByte = [System.Convert]::ToByte($hexByte, 16)
-            $monserialNumber += [System.Text.RegularExpressions.Regex]::Replace([System.Text.Encoding]::ASCII.GetString([byte[]]($asciiByte)), "[^\w\d]", "")
+        if ($update.message.message_id -eq $messageID -and $update.message.chat.id -eq $chatID)
+        {
+            return $true
         }
     }
     
-}else {$monserialNumber = "-"}
-                        $MonINFO += $monserialNumber
+    return $false
+}
 
-                        $startIndex1 = $edidString.IndexOf("00-00-00-FC-00-") + 15
-                        $endIndex1 = $edidString.IndexOf("-0", $startIndex1)
-                        $ModelHex1 = $edidString.Substring($startIndex1, $endIndex1 - $startIndex1).Replace("-", "")
-                        $Model = ""
-                        for ($i = 0; $i -lt $ModelHex1.Length; $i += 2) {
-                            $hexByte1 = $ModelHex1.Substring($i, 2)
-                            $asciiByte1 = [System.Convert]::ToByte($hexByte1, 16)
-                            $Model +=  [System.Text.RegularExpressions.Regex]::Replace([System.Text.Encoding]::ASCII.GetString([byte[]]($asciiByte1)), "[^\w\d ]", "")
+
+# Отправить локальный файл
+function SendFile {
+    param(
+        [string]$chatID,
+        [string]$file,
+        [string]$description
+    )
+
+    $Uri = "https://api.telegram.org/bot$($token)/sendDocument"
+    $Form = @{
+        chat_id = $chatID
+        document = Get-Item $file
+        caption = $description
+        ParseMode = 'MarkdownV2'
+    }
+
+    Invoke-RestMethod -Uri $Uri -Form $Form -Method Post | Out-Null
+
+}
+
+
+# Отправить локальное изображение
+function SendLocalPhoto
+{
+    param(
+        [string]$chatID,
+        [string]$photo,
+        [string]$description
+    )
+
+    $Uri = "https://api.telegram.org/bot$($token)/sendPhoto"
+
+    # Build the Form
+    $Form = @{
+        chat_id = $chatID
+        photo = Get-Item $photo
+        caption = $description
+    }
+
+    Invoke-RestMethod -Uri $Uri -Form $Form -Method Post
+}
+
+
+# Отправить изображение глобальной ссылкой
+function sendUrlPhoto($chat_id, $photoUrl)
+{
+    $photoUrl = [System.Web.HttpUtility]::UrlEncode($photo_url)
+
+    $url = "https://api.telegram.org/bot$token/sendPhoto?chat_id=$chat_id&photo=$photo_url"
+
+    Invoke-RestMethod -Uri $url
+}
+
+
+# Отправка аудиофайла
+function SendTGAudio
+{
+    param(
+        [string]$chatID,
+        [string]$audio,
+        [string]$description
+    )
+
+    $Uri = "https://api.telegram.org/bot$($token)/sendAudio"
+
+    $audioInfo = Get-Item $audio
+    $audioDuration = [System.Media.SoundPlayer]::fromfile($audio).duration / 1000  # Calculate duration in seconds
+
+    $Form = @{
+        chat_id = $chatID
+        audio = $audioInfo
+        caption = $description
+        duration = $audioDuration
+        ParseMode = 'MarkdownV2'
+    }
+
+    Invoke-RestMethod -Uri $Uri -Form $Form -Method Post
+}
+
+
+
+
+
+# Проверить изменения в чате
+function GetUpdates($offset)
+{
+    $url = "https://api.telegram.org/bot$token/getUpdates"
+    $params = @{
+        offset = $offset
+    }
+    $response = Invoke-RestMethod -Uri $url -Method GET -Body $params
+    return $response.result
+}
+
+
+
+
+WRITE-HOST "
+
+  ___  ____               ______     ____   _________ 
+ |_  ||_  _|             |_   _ \  .'    \.|  _   _  |
+   | |_/ /      ______     | |_) |/  .--.  \_/ | | \_|
+   |  __'.     |______|    |  __/.| |    | |   | |    
+  _| |  \ \_              _| |__) |  \--'  /  _| |_   
+ |____||____|            |_______/ \.____.'  |_____|  
+
+"
+
+
+$latestID = 0
+$updates = GetUpdates($latestID)
+
+if ($updates -ne $null)
+{
+    $latestID = $updates[-1].update_id + 1
+}
+
+# - Цикл -
+
+while ($true) 
+{
+    $updates = GetUpdates($latestID)
+
+    if ($updates -ne $null)
+    {
+        foreach ($update in $updates)
+        {
+            $latestID = $update.update_id + 1
+            $message = $update.message
+            $chat = $message.chat
+            $chatID = $chat.id
+            $text = $message.text
+            $from = $message.from
+            $username = $from.username
+
+            if ($chatID -eq $chat_id)
+            {
+                $output = "$username - $text"
+                Add-Content -Path "$PSScriptRoot\LOG\ADM_LOG_$(Get-Date -Format 'yyyyMMdd').txt" -Value $output  #Пишет логи запросов в файлик
+                
+            
+            # Разблокировать учетку
+            if ($text -match "UL (.*)")
+            {
+                if ($username -eq $masternick)
+                {
+                    $accountName = $matches[1]
+                    Unlock-ADAccount $accountName
+                    SendMessage $chatID "УЗ $accountName разблокирована"
+                }
+                    
+            }
+
+
+            # Сброс пароля на стандартный
+            if ($text -match "SP (.*)")
+            {
+                if ($username -eq $masternick)
+                {
+                    $accountName =$matches[1]
+                    $newPassword = ConvertTo-SecureString -String "Aa12345" -AsPlainText -Force
+                    Set-ADAccountPassword -Identity $accountName -NewPassword $newPassword -PassThru | Set-ADUser
+                    Unlock-ADAccount -Identity $accountName
+                    Set-ADUser -Identity $accountName -ChangePasswordAtLogon $true
+                    SendMessage $chatID "Пароль $accountName сброшен на стандартный"
+                 }
+             }
+
+
+             # Получить информацию по сотруднику
+             if ($text -match "^(хуиз|whois) (.*)$")
+             {
+                $accountName = $matches[2]
+                $Name = "$accountName*"
+                $userInfo = Get-ADUser -Filter "DisplayName -like '$Name' -or SamAccountName -eq '$accountName'" -Properties Name, SamAccountName, Company, Title, Department, MobilePhone, HomePhone, DistinguishedName, PasswordExpired, LockedOut, Enabled, extensionAttribute14
+                if (-not $userInfo)
+                {
+                    SendMessage $chatID "Никого не нашел"
+                }
+                elseif ($userInfo.Count -gt 7)
+                {
+                    SendMessage $chatID "Найдено слишком много совпадений, просьба сформулировать более точный запрос"
+                }
+                else
+                {
+                    foreach ($user in $userInfo)
+                    {
+                        $ou = $user.DistinguishedName -split ',' | Where { $_ -match 'OU=' } | ForEach-Object { $_ -replace 'OU=', '' }
+                        $info = "ФИО: $($user.Name) `n" 
+                        $info += "Login: $($user.SamAccountName)`n"
+                        $info += "Табельный: $(if($user.extensionAttribute14) {$user.extensionAttribute14} else { '-' })`n"
+                        $info += "Незалочена: $($user.LockedOut -replace 'True', '❌' -replace 'False', '✅')`n"
+                        $info += "Пароль УЗ: $($user.PasswordExpired -replace 'True', '❌' -replace 'False', '✅')`n"
+                        $info += "Активная: $($user.Enabled -replace 'True', '✅' -replace 'False', '❌')`n"
+                        $info += "Должность: $(if($user.Title) { $user.Title } else { '-' })`n"
+                        $info += "Отдел: $(if($user.Department) { $user.Department } else { '-' })`n"
+                        $info += "Организация: $(if($user.Company) { $user.Company } else { '-' })`n"
+                        $info += "OU: $($ou -join ', ') `n"
+                        $info += "Мобильный : $(if($user.MobilePhone) { $user.MobilePhone -replace '[^\d+]' } else { '-' })`n"
+                        $info += "Внутренний: $(if($user.HomePhone) { $user.HomePhone } else { '-' }) `n" 
+                        $ruk = ""
+
+                        if ($($user.extensionAttribute14))
+                        {
+                            $USER_ID = $user.extensionAttribute14 -replace '\D', ''
+                            $url = "https://myrolf/group/rolf/kartocki-pol-zovatelej/-/pc_cards/card/$USER_ID"
+                            $username = 'rolfnet\laht-itsvc'
+                            $password = '987532159'
+                            $secpasswd = ConvertTo-SecureString $password -AsPlainText -Force
+                            $credential = New-Object System.Management.Automation.PSCredential ($username, $secpasswd)
+                            $response = Invoke-WebRequest -Uri $url -Credential $credential
+        
+                            $imageUrl = $response.Images.src
+                            $imageUrl = $imageUrl -replace 'amp;', ''
+        
+                            $index = 4  
+                            if ($imageUrl -and $imageUrl.Count -gt 4)
+                            {
+                                $fifthImageUrl = $imageUrl[$index]
+                                $photo_URL="https://myrolf$fifthImageUrl"
+                                $imagePath = "$PSScriptRoot\portal.jpg"
+                                Invoke-WebRequest -Uri $photo_URL -Credential $credential -OutFile $imagePath
+                                Write-Output $photo_URL
+                             }
+
+                             $pattern = '<h5>Мои руководители<\/h5>(.*?)<\/div> <\/div>'
+                             $matches = [regex]::Match($response.Content, $pattern, [System.Text.RegularExpressions.RegexOptions]::Singleline)
+
+                             if ($matches.Success)
+                             {
+                                $desiredContent = $matches.Groups[1].Value
+                                $subPattern = '<div class="appointmetn-pc-name"> <a href="https://myrolf/group/rolf/kartocki-pol-zovatelej/-/pc_cards/card/\d+">(.+?)</a> </div>'
+                                $subMatches = [regex]::Matches($desiredContent, $subPattern)
+    
+                                if ($subMatches.Count -eq 0)
+                                {
+                                    $ruk = "Нет руководителей"
+                                }
+                                else
+                                {
+                                    $ruk = ''
+
+                                    foreach ($match in $subMatches)
+                                    {
+                                        $ruk += $match.Groups[1].Value + "`n"
+                                    }
+                                 }
+                              }
+                              else
+                              {
+                                $ruk = "Нет раздела руководители"
+                              }
+                            }
+
+                            $info += "Руководство: $ruk `n`n" 
+
+                            if (Test-Path $imagePath)
+                            {
+                                SendLocalPhoto $chatID $imagePath $info
+                                Remove-Item -Path $imagePath
+                            }
+                            else
+                            {
+                                SendMessage $chatID $info
+                            }
                         }
-                        $Mon += $Model
+
+                        $info=""
                     }
+
+                               
+            }
+
+
+            # Получить информацию по заявкам из ОМНИ
+            if ($text -match "^(OMNI|ОМНИ) (.*)$")
+            {
+                $ReqNum = $matches[2]
+                if ($ReqNum -match '^\d+$' -and [int]$ReqNum -lt 10000000)
+                {
+                    $objOTApp = New-Object -ComObject OTAut.OtApplication
+                    $objOTSession = $objOTApp.MakeSession($strServerName, $strServerPort, $strLoginName, $strPassWd)
+
+                    if ($objOTSession -ne $null)
+                    {
+                        $ReqNum = $ReqNum.TrimStart('0')
+                        WRITE-host "Searching request $ReqNum " -ForegroundColor White
+                        $folderPath = "001 Деятельность"
+                        $specificFolder = $objOTSession.GetRequestFolderByPath($folderPath)
+    
+                        if ($specificFolder -ne $null)
+                        {
+                            $filter = $specificFolder.MakeFilter()
+                            $filter.UserField("Номер")=$ReqNum
+
+                            $search = $specificFolder.CreateSearchRequest()
+                            $search.Filter = $filter
+                            $search.Recursive = $true
+                            $result = $search.Execute()
+                            if ($result -ne $null)
+                            {
+                                foreach ($req in $result)
+                                {            
+                                    $userFields = $req.UserFields
+                                    $nm = $userFields.Item("Номер").Value
+                                    $rabGrp = $userFields.Item("Рабочая группа").Value
+                                    $status = $userFields.Item("Статус").Value
+                                    $user = $userFields.Item("Пользователь").Value
+                                    $priority = $userFields.Item("Приоритет").Value
+                                    $description = $userFields.Item("Описание").Value
+                                    $protocol = $userFields.Item("Протокол").Value
+                                    $description | Out-File -FilePath 'description.txt'
+                                    $protocol | Out-File -FilePath 'protokol.txt'
+            
+                                    write-host $nm $ReqNum
+                                    if($nm -eq $ReqNum)
+                                    {
+                                        $file1 = 'description.txt' 
+                                        SendFile  $chatID $file1 "Заявка:  $nm `nКоманда: $rabGrp `nСтатус: $status `nПользователь: $user"
+                                        $file = 'protokol.txt'
+                                        SendFile $chatID $file
+                                        Remove-Item -Path "$PSScriptRoot\description.txt"
+                                        Remove-Item -Path "$PSScriptRoot\protokol.txt"
+                                     }
+                                } 
+                            }
+                            else
+                            {
+                                SendMessage $chatID  "$ReqNum не найден."
+                            }
+                        }
+                        else
+                        {
+                            SendMessage $chatID "Folder $folderPath not found."
+                        }
+ 
+                        # Close the session
+                        $objOTSession.Logoff()
+    
+                    }
+                    else
+                    {
+                        SendMessage $chatID  "Не смог создать сессию с $strServerName"
+                    }                                 
+                }
+                else
+                {    
+                    SendMessage $chatID  "Ты по-моему перепутал"                   
                 }
             }
 
-            [PSCustomObject]@{
-                ComputerName = $env:COMPUTERNAME
-                SerialNumber = $serialNumber
-                Monitor = $Mon -join ", "
-                MonInfo = $MonINFO -join ", "
-                CurrentUser = $currentUser
-                Processor = $processor
-                RAMCapacity = "$ramCapacity GB"
-                StorageType = $diskinfo -join "`n"
-                RAMSlotsUsed = $ramSlotsUsed
-                MAC= $macAddress
-                LastBootTime = $uptimeFormatted
-                usedSpaceCInGB = $usedSpaceCInGB
-                usedSpaceDInGB = $usedSpaceDInGB
-                MG=$MG
-            }
-        }
 
-        if ($res.CurrentUser -like $null) {$res.CurrentUser = "_Нет активных сессий_"}
-        if ($res.Monitor -like $null) {$res.Monitor = "Дисплей не подключен"}
-        if ($res.MonInfo -like $null) {$res.MonInfo = "-"}
-        sendMessage $URL_set $chat_id "Комп: * $($res.ComputerName) *`nЮзер: * $($res.CurrentUser) *`nПроц: $($res.Processor)`nRAM: $($res.RAMCapacity) | Type: $($res.MG) | Slot(s): $($res.RAMSlotsUsed)`nДиск(и): $($res.StorageType)`nFreeSpace: C: $($res.usedSpaceCInGB)Gb | D: $($res.usedSpaceDInGB)Gb `nSN:* $($res.Serialnumber) *`nМонитор(ы): $($res.Monitor)`nМоник-Инфо: $($res.Moninfo)`nMAC: $($res.MAC)`nUPtime: $($res.LastBootTime)  "
-        $comp = $null
-    }
-    else {
-        sendMessage $URL_set $chat_id "$comp не PING :("
-        $comp = $null
-    }
+            # Собрать информацию по компьютеру
+            if ($text -match "PCINFO (.*)")
+            {
+                $compN = $matches[1]
+                Add-Content -Path "$PSScriptRoot\LOG\ADM_LOG_$(Get-Date -Format 'yyyyMMdd').txt" -Value "INFO $compN " 
+                  
+                if ($compN -eq "127.0.0.1")
+                {
+                    SendMessage $chatID "Игнорирую пидарасов"
+                }
+                else
+                {
+                    if ($compN -as [System.Net.IPAddress])
+                    {
+                        $comp = [System.Net.Dns]::GetHostEntry($compN).HostName.split('.')[0]
+                        if ($comp -like $null)
+                        {
+                            $comp = $compN
+                        }
+                }
+                else
+                {
+                    $comp=$compN
+                }
 
-}
- 
+                write-host $comp $compN
 
+                if (Get-ADComputer -Filter {Name -eq $comp})
+                {
+                    if (Test-Connection $comp -Quiet -Count 1)
+                    {
+                        $OS = Get-CimInstance -ClassName Win32_OperatingSystem -ComputerName $comp
+                        $CS = Get-CimInstance -ClassName Win32_ComputerSystem -ComputerName $comp
+                        $BIOS_INF = Get-CimInstance -ClassName Win32_BIOS -ComputerName $comp
+                        $processor = Get-CimInstance -ClassName Win32_Processor -ComputerName $comp
+                        $motherboard = Get-CimInstance -ClassName Win32_BaseBoard -ComputerName $comp
+                        $memory = Get-CimInstance -ClassName Win32_PhysicalMemory -ComputerName $comp
+                        $disk = Get-CimInstance -ClassName Win32_DiskDrive -ComputerName $comp
 
-    if($return.text -like 'LAPS*')
-    {
-        $comp = $($return.text) -replace "LAPS ",""
-        $compCheck = get-adcomputer $comp
-        if ($compCheck -eq $Null){
-                                    sendMessage $URL_set $chat_id "Такого компьютера нет в АД`nУ тебя есть два пути:`n1. Перезалить Windows;`n2. Изменить пароль локального админа с помощью: https://www.hirensbootcd.org/`n`nУдачи =)"
-                                    $comp = $null
-                                    }else{
-                                            $password = get-adcomputer $comp -properties ms-mcs-admpwd | select -ExpandProperty ms-mcs-admpwd
-                                            $compCheck = $null
-                                            $comp = $null
-                                            if ($password -eq $null){
-                                                                       sendMessage $URL_set $chat_id "У этого компьютера нет LAPS,`nпопробуй стандартный пароль.`nЕсли не подойдёт пароль, то для тебя есть два варианта:`n1. Перезалить Windows;`n2. Изменить пароль локального админа с помощью: https://www.hirensbootcd.org/`n`nУдачи =)"
-                                                                       $comp = $null
-                                                                       }else{
-                                                                               sendMessage $URL_set $chat_id  $password
-                                                                               $comp = $null
-                                                                             }
-                                          }
-                        $password = $Null
-      }
+                        $installDateFormatted = $os.InstallDate.ToString("dd/MM/yyyy")
+                        $uptime = (Get-Date) - $OS.LastBootUpTime
 
-      if($return.text -like 'NAME*')
-    {
-        $pcname = $($return.text) -replace "NAME ",""
-$i = 0
-$b = 1
-$a = $null
-While ($i -eq 0)
-    {
-if ($b -lt 10){
-$a = "$($pcname)0$($b)"
-} else {
-$a = "$($pcname)$b"
-}
-$Check = get-adcomputer $a | select -ExpandProperty name
-if  ($Check -eq $a)
-    {
-    $b++
-    $a = $null
-    }else{
-    sendMessage $URL_set $chat_id  "Свободное имя $a"
-    $b = 1
-    $i = 1
-    $a = $null
-            }
-    }
-}
+                        $UN = ($CS.UserName) -replace '.*\\'
 
-if($return.text -like 'MSKNAME*')
-    {
-        $pcname = $($return.text) -replace "MSKNAME ",""
+                        $network = Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration -ComputerName $comp | Where-Object {$_.IPEnabled -eq $true}
+                        $IPv4Addresses = $network.IPAddress | Where-Object {$_ -like "*.*.*.*"}
+                        $diskPartitions = Get-CimInstance -ClassName Win32_LogicalDisk -ComputerName $comp | Where-Object {$_.DriveType -eq 3}
 
-$b = 1
-$a = $null
-While ($i -eq 0){
-$a = "$($pcname)$b"
-$Check = get-adcomputer $a | select -ExpandProperty name
-if  ($Check -eq $a)
-    {
-    $b++
-    $a = $null
-    }else{
-    sendMessage $URL_set $chat_id  "Свободное имя $a"
-    $b = 1
-    $i = 1
-    $a = $null
-            }
-    }
-    }
+                        $PART = foreach ($partition in $diskPartitions)
+                        {
+                            $freeSpaceGB = "{0:F2}" -f ($partition.FreeSpace / 1GB)
+                            $totalSpaceGB = "{0:F2}" -f ($partition.Size / 1GB)
+                            $freeSpacePercentage = "{0:P2}" -f ($partition.FreeSpace / $partition.Size)
+                            "$($partition.DeviceID) $freeSpaceGB GB ($freeSpacePercentage)"
+                        }
 
+                        switch ($memory.SMBIOSMemoryType)
+                        {
+                            26 { $MemoryType = "DDR4"; break }
+                            24 { $MemoryType = "DDR3"; break }
+                        }
 
-   if($return.text -like 'Дукалис*'){
-    $i++
-                                    if(($i -eq 0) -or ($i -eq 1)){ 
-                                                                    sendMessage $URL_set $chat_id "Я тут."
-                                                                        }
-                                    if($i -eq 2){
-                                                    sendMessage $URL_set $chat_id "Я тут, приказывайте."
+                        switch ($memory.FormFactor)
+                        {
+                            12 { $FormFactor = "SODIMM"; break }
+                            8 { $FormFactor = "DIMM"; break }
+                        }
+
+$systemInfo = @"
+Комп: *$($CS.Name)*
+Юзер: *$UN*
+
+Проц: $($processor.Name)
+Мать: $($motherboard.Product)
+RAM: $FormFactor $MemoryType $(($memory | Measure-Object Capacity -Sum).Sum / 1GB) Gb | Slot(s): $(($memory | Select-Object -ExpandProperty BankLabel | Get-Unique).Count)
+Disk: $($disk | Select-Object -ExpandProperty Model)
+SN: *$($BIOS_INF.SerialNumber)*
+
+OS: $($os.Caption) *$($os.BuildNumber)* | Installed: $installDateFormatted
+Free: $PART
+MAC: $($network.MACAddress)
+IP: $($IPv4Addresses -join ', ')
+UPtime: $($uptime.Days) D $($uptime.Hours) h $($uptime.Minutes) min
+"@
+
+                        $Lines = @(query user /server:$comp) -split "\n"
+
+                        if ($Lines -eq $Null)
+                        {
+                            $seancess = "Нет активных сеансов"
+                        }
+                        else
+                        {
+
+                            foreach($Line in $Lines)
+                            {
+                                if (($Line -match "USERNAME\s+SESSIONNAME\s+ID\s+STATE\s+IDLE TIME\s+LOGON TIME") -or ($Line -match "ПОЛЬЗОВАТЕЛЬ\s+СЕАНС\s+ID\s+СТАТУС\s+БЕЗДЕЙСТВ`.\s+ВРЕМЯ ВХОДА"))
+                                {
+                                    continue  # Игнорируем строку с заголовками
+                                }
+
+                                $string = $Line -split "\s+"
+
+                                $username = $string[1]
+
+                                if($string[2] -match '\d+')
+                                {
+                                    $remoteSessionID = $string[2]
+                                    $date = $string[5]
+                                    $time = $string[6]
+
+                                    if (($string[3] -eq "active") -or ($string[3] -eq "активно"))
+                                    {
+                                        $status = "Активный"
                                     }
-                                    if($i -eq 3){
-                                                    sendMessage $URL_set $chat_id "Видимо ты не знаешь или забыл мой функционал. Тыкни сюда: /info - я напомню. "
-                                                    $i = 0
+                                    else
+                                    {
+                                        $status = "-"
                                     }
-    }
+                                }
+                                else
+                                {
+                                    $remoteSessionID = $string[3]
+                                    $date = $string[6]
+                                    $time = $string[7]
+
+                                    if (($string[4] -eq "active") -or ($string[4] -eq "активно"))
+                                    {
+                                        $status = "Активный"
+                                    }
+                                    else
+                                    {
+                                        $status = "-"
+                                    }
+                                }
+                            
+                                $seancess += "Логин: *$($username.ToUpper())* | ID: $remoteSessionID | Статус: *$($status)*`n"
+
+                             }
+
+                            }
 
 
+                        $mID = SendMessage $chatID $systemInfo
+                        $systemInfo=""
 
-    if($return.text -in '/help', '/инфо', '/info'){
-sendMessage $URL_set $chat_id "Я Дукалис и вот мой функционал:`n
-Команды:`nLAPS `"*имя компа*`" - узнать пароль локального администратора;`n
-NAME `"*имя компа без номера*`" - узнать свободный номер для компьютера;`n
-PCINFO `"*имя компа*`" - текущая инфо по компу;`n
-/Cryptopro - ключики и дистр КриптоПро;`n
-/Powerbi - ссылка на свежий PowerBi;`n
-/Cisco - дистр *ciscoAnyconnect*;`n
-/Zoom - дистр Zoom клиента;`n
-/Portal - прямые ссылки на *ROLF*овские оперсистемы;`n
-/Quickpic - информация по квикпику;`n
-/Scripts - да, да... это скрипты;`n
-/Share - шары с софтом и полезностями.`n
-`n
-/help - справочная информация по боту`n
-`n
+                        $res = Invoke-Command –ComputerName $($CS.Name) –ScriptBlock {
 
-Все возражения, предложения, пожелания и угрозы направлять сюда: dvandreev2@rolf.ru"
-}
+                        $diskinfo = @()
+                        $Mon = @()
+                        $MonINFO = @()
 
-       [array]$Quickpic = @('Квикпик', 'Quickpic', '/Quickpic')
-    if($return.text -in $Quickpic){
-                                    sendMessage $URL_set $chat_id "Всех желающих пожаловаться в техподдержку, сюда: QuickPic@rolf.ru`nЕсли кто то просит его установить, перешли сообщение ниже ему в мессенджер или почту.`nЗапомни, мы не занимаемся поддержкой этого приложения. `nTHE END"
-                                    sendMessage $URL_set $chat_id "Привет!`nЧто бы установить приложение quickpic переходи по ссылке:`nhttps://soft.isb.rolf.ru/qp/default.htm - открывать надо со смартфона.`nВ случае возникновения технических проблем, можно написать сюда: QuickPic@rolf.ru`nХорошего дня!"
-                                    sendPhoto
-                                   }
+                        $storage = Get-PhysicalDisk 
+                        foreach ($disk in $storage)
+                        {
+                            $storageType = $disk.MediaType
+                            $diskSize = [math]::Round(($disk.Size / 1GB), 2)
+                            $diskinfo += "$storageType $diskSize GB"
+                        }
+
+                        $devices = Get-PnpDevice | Where-Object {$_.Status -eq 'OK' -and $_.Class -eq 'Monitor'}
+                        foreach ($device in $devices)
+                        {
+                            $deviceId = $device.InstanceId
+                            $monitor = "HKLM:\SYSTEM\CurrentControlSet\Enum\$deviceId"
+                            $monitorIdSubkey = Join-Path -Path $monitor -ChildPath 'Device Parameters'
+
+                            if (Test-Path -Path $monitorIdSubkey)
+                            {
+                                if (Get-ItemProperty -Path $monitorIdSubkey -Name EDID -ErrorAction SilentlyContinue)
+                                {
+                                    $edidBytes = Get-ItemProperty -Path $monitorIdSubkey -Name EDID | Select-Object -ExpandProperty EDID
+                                    $edidString = [System.BitConverter]::ToString($edidBytes)
+
+                                    $startIndex = $edidString.IndexOf("00-00-00-FF-00-")
+                                    if ($startIndex -ne -1)
+                                    { 
+                                        $startIndex += 15
+                                        $endIndex = $edidString.IndexOf("-0", $startIndex)
+                                        if ($endIndex -ne -1)
+                                        {
+                                            $serialNumberHex = $edidString.Substring($startIndex, $endIndex - $startIndex).Replace("-", "")
+                                            $monserialNumber = ""
+                                            for ($i = 0; $i -lt $serialNumberHex.Length; $i += 2)
+                                            {
+                                                $hexByte = $serialNumberHex.Substring($i, 2)
+                                                $asciiByte = [System.Convert]::ToByte($hexByte, 16)
+                                                $monserialNumber += [System.Text.RegularExpressions.Regex]::Replace([System.Text.Encoding]::ASCII.GetString([byte[]]($asciiByte)), "[^\w\d]", "")
+                            
+                                            }
+                        
+                                        }
+                    
+                                    }
+                                    else
+                                    {
+                                        $monserialNumber ="-"
+                                    }
+				    
+                                    $MonINFO += $monserialNumber
+                                    $startIndex1 = $edidString.IndexOf("00-00-00-FC-00-") + 15
+                                    $endIndex1 = $edidString.IndexOf("-0", $startIndex1)
+                                    $ModelHex1 = $edidString.Substring($startIndex1, $endIndex1 - $startIndex1).Replace("-", "")
+                                    $Model = ""
+
+                                    for ($i = 0; $i -lt $ModelHex1.Length; $i += 2)
+                                    {
+                                        $hexByte1 = $ModelHex1.Substring($i, 2)
+                                        $asciiByte1 = [System.Convert]::ToByte($hexByte1, 16)
+                                        $Model +=  [System.Text.RegularExpressions.Regex]::Replace([System.Text.Encoding]::ASCII.GetString([byte[]]($asciiByte1)), "[^\w\d ]", "")
+                                    }
+               
+                                    if ($Model -like $null)
+                                    {
+                                        $Model ="Нет подключенного монитора"
+                                    }
+
+                                    $Mon += $Model
+                                }
+                            }
+                        }
     
-    [array]$Zoom = @('Зум', 'Zoom', '/Zoom')
-    if($return.text -in $Zoom){
-                                    sendMessage $URL_set $chat_id "Запуск по порядку:`n1.Дистр принудительной очистки старой версии клиента – \\alt-it-fs\Distrib\_Zoom\CleanZoom.exe`n2. msi нового клиента - \\alt-it-fs\Distrib\_Zoom\ZoomInstallerFull.msi"
-                                    }
 
-    [array]$CryptoPro = @('Криптопро', 'Cryptopro', '/Cryptopro')
-    if($return.text -in $Cryptopro){
-                                    sendMessage $URL_set $chat_id "КриптоПро, ключи:`nv4.x - 4040CA000001PTUV6VYPLG6TK`nv5.x - 505090301001K3WV3B6FR3AMX`n`nДистр:`nhttps://cryptopro.ru/products/csp/downloads`nЛогин: dvandreev2@rolf.ru`nПароль: Aa12345"
-                                    sendMessage $URL_set $chat_id "Обновить ключ лицензии можно удалённо через реестр:`n1. Для 4.0 тут:`nHKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products\7AB5E7046046FB044ACD63458B5F481C\InstallProperties`n2. Для 5.0 тут:`nHKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products\08F19F05793DC7340B8C2621D83E5BE5\InstallProperties`nВ свойстве `"ProductID`" надо просто заменить ключ на актуальный."
-                                    }
-    [array]$Cisco = @('Циска','/Cisco', 'Cisco')
-    if($return.text -in $Cisco){
-                                    sendMessage $URL_set $chat_id "Свежая CiscoAnyConnect для всех ОС (Win/Nix/Mac): http://www.hostwaydcs.com/CISCO/AnyConnect"
-                                    }
+                        [PSCustomObject]@{
+                            Monitor = $Mon -join ", "
+                            MonInfo = $MonINFO -join ", "
+                            StorageType = $diskinfo -join ", "
+                            }
+                        }
+   
 
-    [array]$Scripts = @('скрипты','script', 'scripst', 'скрипт', '/Scripts')
-    if($return.text -in $Scripts){
-                                    sendMessage $URL_set $chat_id "Скрипты тут: \\cl-it02\ADM-SUPPORT\Scripts\"
-                                    }
-	
-	[array]$Powerbi = @('Поверби','Powerbi', '/Powerbi')
-    if($return.text -in $Powerbi){
-                                    sendMessage $URL_set $chat_id "Свежий PowerBi: https://www.microsoft.com/ru-ru/download/confirmation.aspx?id=58494"
-                                    }
+$systemInfo = @"
+Комп: *$($CS.Name)*
+Юзер: *$UN *
 
-    	[array]$newYear = @('Поздравление','НГ','Новый год','newYear', '/newYear', '/NG')
-    if($return.text -in $newYear){
-# НГ
-$s1 = Get-Random -InputObject @("с новым счастьем!", "365 новых дней - 365 новых шансов!", "наслаждайтесь каждым его моментом!", "примите мои искренние поздравления!", "годом Кролика!", "новый старт начинается сегодня!", "и пусть самые лучшие сюрпризы будут у вас впереди!")
-$s2 = Get-Random -InputObject @("много новых достижений, крепкого здоровья и любви, пусть задуманное сбудется!", "чтобы этот год подарил много поводов для радости и счастливых моментов!", "чтобы будущий год принес столько радостей, сколько дней в году, и что бы каждый день дарил вам улыбку и частичку добра!", "Вам прекрасного года, полного здоровья и благополучия", "чтобы Кролик принёс в вашу семью любовь, нежность, взаимопонимание и счастье!", "всем в Новом году быть здоровыми, красивыми, любимым и успешными!", "чтобы сбылось все то, что вы пожелали. Все цели были достигнуты, а планы перевыполнены. Все плохое и неприятное осталось в уходящем году!")
-$s3 = Get-Random -InputObject @("Новый год принесет много радостных и счастливых дней!", "каждый новый миг наступающего года приносит в дом счастье, везение, уют и теплоту!", "все, что мы планировали обязательно сбудется!", "наступающй год станет самым плодотворным годом в вашей жизни!", "год будет полон ярких красок, приятных впечатлений и радостных событий!", "этот год будет ВАШИМ годом!", "Новый год принесет все, о чем вы мечтаете и немного больше!")
+Сеансы:
+$seancess
+Проц: $($processor.Name)
+Мать: $($motherboard.Product)
+RAM: $FormFactor $MemoryType $(($memory | Measure-Object Capacity -Sum).Sum / 1GB) Gb | Slot(s): $(($memory | Select-Object -ExpandProperty BankLabel | Get-Unique).Count)
+Disk(s): $($res.StorageType)
+Additional Info: $($disk | Select-Object -ExpandProperty Model)
+Monitor: $($res.Monitor)
+Моник-Инфо: $($res.MonInfo)
+SN: *$($BIOS_INF.SerialNumber)*
 
-                                    sendMessage $URL_set $chat_id "С Новым годом, $s1 Я желаю $s2 И пусть $s3"
-                                    }
-
-    [array]$Share = @('шары','shared', 'distr', 'дистрибутивы', '/Share')
-    if($return.text -in $Share){
-sendMessage $URL_set $chat_id "
-Шары:`n
-Главная шара: \\1\`n
-Карлайн: \\cl-it02\SOFT\`n
-Лахта: \\laht-itsrv\SOFT\`n
-Аэропорт: \\aero-music\SOFT\`n
-Алтуфьево: \\alt-it-fs\Distrib\`n
-`n
-Я больше не знаю шар. Хотите заделиться с коллегами своей шарой?`n
-Пишите сюда: dvandreev2@rolf.ru"
-}
-     [array]$Doc = @('/Doc')
-     if($return.text -in $Doc){
-     $documentObject = get-item "D:\tgBots\AdmChatbot\Files\test.txt"
-     sendPhoto $URL_photo $chat_id $documentObject
-     }
-
-                                   
-    [array]$RolfPortals = @('Порталы','Прямые ссылки', 'Прямыессылки', '/Portal')
-    if($return.text -in $RolfPortals){
-sendMessage $URL_set $chat_id "АС Рольф: https://asrolf:10146/asrolf/root$.startup `n
-АС Рольф-Отчеты: https://dp-asw2:10152/asrolf/root$.startup `n
-ЕКБ: https://asrolf:10156/asrolf2/po_bm$.startup `n
-ARMS: http://cr-arms-web:180/ARMS/ru/ `n
-Web-табель: http://rolf-timeboard/ `n
-Pronto X: https://dp-prontox-app-rolf/ `n
-Uniplan: https://dp-uniplan-app-rolf/ `n
-WEB - автомобили: https://asrolf:63146/apex/f?p=101:23:9333487394004:::::#no-back-button `n
-WEB - клиенты: https://asrolf:63146/apex/f?p=123:6:9333487394004::NO:::#no-back-button `n
-WEB - Автопрокат: https://asrolf:63146/apex/f?p=103:8:9333487394004:::::#no-back-button `n
-WEB - Fishblue: https://asrolf:63146/apex/f?p=107:10:9333487394004:::::#no-back-button `n
-WEB - Fleet: https://asrolf:63146/apex/f?p=106:321:9333487394004::NO::P0_TAB:FLEET#no-back-button `n
-WEB - ЕРЛ: https://asrolf:63146/apex/f?p=105:17:9333487394004::NO:::#no-back-button `n
-WEB - кузов: https://asrolf:63146/apex/f?p=106:14:9333487394004::NO::P0_TAB:BODYSHOP#no-back-button `n
-WEB - сервис: https://asrolf:63146/apex/f?p=106:42:9333487394004::NO::P0_TAB:SERVICE#no-back-button `n
-WEB - ОЗЧ: https://asrolf:63146/apex/f?p=106:300:9333487394004::NO::P0_TAB:PARTS#no-back-button `n
-WEB - лояльность: https://asrolf:63146/apex/f?p=110:110:9333487394004::NO::P110_MODE:#no-back-button `n
-WEB - страхование: https://asrolf:63146/apex/f?p=107:401:9333487394004::NO::P0_TAB:INSURANCE#no-back-button `n
-WEB - Бронирование: https://asrolf:63146/apex/f?p=107:83:9333487394004::NO:::#no-back-button `n
-WEB - Отчеты https://asrolf:63146/apex/f?p=106:38:9333487394004::::P0_TAB:RP#no-back-button `n"
-                                    }
-Write-host $URL
-    Start-Sleep -s $timeout
-    
-}
+OS: $($os.Caption)* $($os.BuildNumber)* | Installed: $installDateFormatted
+Free Space: $PART
+MAC: $($network.MACAddress)
+IP: $($IPv4Addresses -join ', ')
+UPtime: $($uptime.Days) D $($uptime.Hours) h $($uptime.Minutes) min
 
 
-<#
-Это отправка файлов, но пока что этот функционал не внедрялся, не понятно что и зачем можно отправить в тг чат, что бы это было полезным.
-Возможно APK каких либо классный приложений на смартфон.
+"@
 
-$token = "000000000:1111111111111111111"
-$chat_id = "11111111111"
-$uri = "https://api.telegram.org/bot$Token/sendDocument"
-$fileObject= get-item D:\tgBots\AdmChatbot\Files\test.txt
-$Form = @{
-        chat_id              = $chat_ID
-        document             = $fileObject
+                        EditMessage $chatID $mID $systemInfo
+                        $res = $null
+                        $systemInfo = $null
+
+                    }
+                    else
+                    {
+                        SendMessage $chatID "$comp не PING"}
+                    }
+                    else
+                    {
+                        SendMessage $chatID "Устройство $compN не входит в AD или DHCP не вернул имя"}
+                    }
+
+      		    #Очищает переменные ВАЖНО.
+                    Clear-variable seancess, username, remoteSessionID, date, time, comp, status, $comp, $systemInfo, $res
+
+                }
+
         
-    }#form
-$invokeRestMethodSplat = @{
-        Uri         = $Uri_document
-        ErrorAction = 'Stop'
-        Form        = $Form
-        Method      = 'Post'
+            # ЛАПС (Узнать пароль локального админа на конкретном ПК)
+            if ($text -match "^(LAPS) (.*)$")
+            {
+                $compname = $matches[2]
+                $computer = Get-ADComputer -Filter {Name -eq $compname}
+                Add-Content -Path "$PSScriptRoot\LOG\ADM_LOG_$(Get-Date -Format 'yyyyMMdd').txt" -Value "$compname" 
+                if ($computer)
+                {
+                    $Pass = Get-ADComputer -Identity $compname -Properties ms-mcs-admpwd | Select-Object -ExpandProperty ms-mcs-admpwd
+
+   	   	    # Синтезатор голоса записывает аудио, на случай если пароль сгенерировался не читабельным
+                    if ($Pass -ne $null)
+                    {
+                        $synthesizer = New-Object System.Speech.Synthesis.SpeechSynthesizer
+                        $synthesizer.Rate = -3 
+                        $audio = "$PSScriptRoot\pass.wav"
+                        $synthesizer.SetOutputToWaveFile($audio)
+                        $P_ASS = $Pass -split "(?!^)"
+                        $P_ASS =  $P_ASS -join " "
+                        $synthesizer.Speak($P_ASS)
+                        $synthesizer.SetOutputToDefaultAudioDevice()
+
+                        SendFILE $chatID $audio $Pass
+
+                        Remove-Item -Path $audio
+                        $Pass = ""
+                    }
+                    else
+                    {
+                        SendMessage $chatID "Нет пароля для $compname `nПробуй стандартный`nУдачи =)"
+                    }
+                }
+                else
+                {
+                    SendMessage $chatID "$compname не найден в АД `nУ тебя есть два пути:`n1. Перезалить Windows;`n2. Изменить пароль локального админа с помощью: https://www.hirensbootcd.org/`n`nУдачи =)"
+                }
+            }
+
+
+             #Узнать свободное имя для компуктера
+             if($text -like 'NAME*')
+             {
+               $pcname = $($text) -replace "NAME ",""
+               $i = 0
+               $b = 1
+               $a = $null
+               While ($i -eq 0)
+               {
+                  if ($b -lt 10)
+                  {
+                       $a = "$($pcname)0$($b)"
+                   }
+                   else
+                   {
+                       $a = "$($pcname)$b"
+                   }
+
+                   $Check = get-adcomputer $a | select -ExpandProperty name
+
+                   if  ($Check -eq $a)
+                   {
+                       $b++
+                       $a = $null
+                   }
+                   else
+                   {
+                       sendMessage $chatID  "Свободное имя $a"
+                       $b = 1
+                       $i = 1
+                       $a = $null
+                    }
+                }
+             }
+
+
+             #Узнать активные сессии на комуктере
+             if ($text -like 'Sessions*')
+             {
+                $comp = $($text) -replace "Sessions ",""
+            
+                if (($comp -eq $env:computername) -or ($comp -eq "localhost") -or ($comp -eq "127.0.0.1"))
+                {
+                    sendMessage $chatID "$username - не лезь =)"
+                }
+                else
+                {
+                    if (Test-Connection $comp -Quiet -Count 1)
+                    {
+
+                        $Lines = @(query user /server:$comp) -split "\n"
+
+                        if ($Lines -eq $Null)
+                        {
+                            sendMessage $chatID "*$($comp.ToUpper()):*`nНет активных сеансов"
+                        }
+                        else
+                        {
+
+                            foreach($Line in $Lines)
+                            {
+                                if (($Line -match "USERNAME\s+SESSIONNAME\s+ID\s+STATE\s+IDLE TIME\s+LOGON TIME") -or ($Line -match "ПОЛЬЗОВАТЕЛЬ\s+СЕАНС\s+ID\s+СТАТУС\s+БЕЗДЕЙСТВ`.\s+ВРЕМЯ ВХОДА"))
+                                {
+                                    continue  # If is the header then skip to next item in array
+                                }
+
+                                $string = $Line -split "\s+"
+
+                                $username = $string[1]
+
+                                if($string[2] -match '\d+')
+                                {
+                                    $remoteSessionID = $string[2]
+                                    $date = $string[5]
+                                    $time = $string[6]
+
+                                    if (($string[3] -eq "active") -or ($string[3] -eq "активно"))
+                                    {
+                                        $status = "Активный"
+                                    }
+                                    else
+                                    {
+                                        $status = "-"
+                                    }
+                                }
+                                else
+                                {
+                                    $remoteSessionID = $string[3]
+                                    $date = $string[6]
+                                    $time = $string[7]
+
+                                    if (($string[4] -eq "active") -or ($string[4] -eq "активно"))
+                                    {
+                                        $status = "Активный"
+                                    }
+                                    else
+                                    {
+                                        $status = "-"
+                                    }
+                                }
+                            
+                                $tgmsg += "Пользователь: $username`nID сессии: $remoteSessionID`nСтатус: $status`nДата и время авторизации:`n$date, $time`n`n"
+
+                             }
+
+                             #$comp = $comp.ToUpper()
+                             sendMessage $chatID "*$($comp.ToUpper()):*`n`n$tgmsg"
+
+                            Clear-variable tgmsg
+                            Clear-Variable username
+                            Clear-Variable remoteSessionID
+                            Clear-Variable date
+                            Clear-Variable time
+                            Clear-variable comp
+                            Clear-variable status
+
+                        }
+                    }
+                    else
+                    {
+
+                        sendMessage $chatID "*$($comp.ToUpper()):*`n не PING :("
+                        Clear-variable comp
+
+                    }
+                }
+             }
+
+
+             #Список почтовых групп конкретного пользователя
+             if ($text -match "^(mailgroups) (.*)")
+             {
+                $user = $matches[2]
+                write-host $user
+                $userInfo = Get-ADUser -Filter {SamAccountName -eq $user} -Properties *
+
+                if (-not $userinfo)
+                {
+                    SendMessage $chatID "Никого не нашел"
+                }
+                else
+                {
+                    $groupList = get-ADPrincipalGroupMembership $user | Where-Object {$_.name -match "#\w+"} | select -ExpandProperty name
+                    $groupList = $groupList -join "`n"
+                    SendMessage $chatID "Список почтовых рассылок $($user):`n$groupList"
+                }
+
+                Clear-Variable user, groupList
+             }
+
+
+
+             #Список групп безопасности конкретного пользователя
+	     ###ПОФИКСИТЬ: У половины пользователей есть баг, при котором api сервер возвращает 400 ошибку и не передает результат в чат, пока причина не выявлена.
+             if ($text -match "^(usergroups) (.*)")
+             {
+                $user = $matches[2]
+                write-host $user
+                $userInfo = Get-ADUser -Filter {SamAccountName -eq $user} -Properties *
+
+                if (-not $userinfo)
+                {
+                    SendMessage $chatID "Никого не нашел"
+                }
+                else
+                {
+                    $groupList = get-ADPrincipalGroupMembership $user | Where-Object {$_.name -notmatch "#\w+"} | select -ExpandProperty name
+                    $groupList = $groupList -join "`n"
+                    SendMessage $chatID "Список групп безопасности $($user):`n$groupList"
+                }
+
+                Clear-Variable user, groupList
+             }
+
+
+	     #Список доступных команд
+             if (($text -eq 'инфо') -or ($text -eq 'info'))
+             {
+$info = "
+Командлист:`n
+1. Поиск информации о сотруднике:
+```ХУИЗ|WHOIS [Логин] или [ФИО]``` `n
+2. Сбор информации о компьютере:
+```PCINFO [Имя компьютера]``` `n
+3. Информация по заявке в ОМНИ:
+```ОМНИ|OMNI [Номер заявки]``` `n
+4. Узнать пароль локального админа:
+```LAPS [Имя компьютера]``` `n
+5. Узнать свободное имя для компьютера:
+```NAME [Имя компьютера без цифры*]``` `n
+6. Информация по сеансам на компьютере:
+```SESSIONS [Имя компьютера]``` `n
+7. Получить список рассылок сотрудника:
+```MAILGROUPS [Логин]``` `n
+8. Получить список групп сотрудника:
+```USERGROUPS [Логин]``` `n
+"
+
+                SendMessage $chatID $info
+             }
+
+
+            }
+
+        }
     }
 
-Invoke-RestMethod @invokeRestMethodSplat
-#>
+    Start-Sleep -Seconds 2
+}

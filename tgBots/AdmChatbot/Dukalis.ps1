@@ -855,6 +855,67 @@ UPtime: $($uptime.Days) D $($uptime.Hours) h $($uptime.Minutes) min
              }
 
 
+      	     #Проверить ссылку на VirusTotal
+             if ($text -match "^(CHECKURL|ЧЕКУРЛ) (.*)$")
+             {
+                    $testUrl = $matches[2]
+                    $headers=@{}
+                    $headers.Add("accept", "application/json")
+                    $headers.Add("x-apikey", "3d22378329d8e185644c0222321403f7e6067c498db5e5d52d2515dcd7630fa1")
+                    $headers.Add("content-type", "application/x-www-form-urlencoded")
+                    $response = Invoke-WebRequest -Uri 'https://www.virustotal.com/api/v3/urls' -Method POST -Headers $headers -ContentType 'application/x-www-form-urlencoded' -Body "url=$testUrl"
+
+
+                    $pattern = '"id": "(.*?)",'
+                    $matches = [regex]::Match($response.Content, $pattern, [System.Text.RegularExpressions.RegexOptions]::Singleline)
+
+                    if ($matches.Success)
+                    {
+                        $analysisID = $matches.Groups[1].Value
+                        $analysisID
+
+                        DO
+                        {
+                            $response = Invoke-WebRequest -Uri "https://www.virustotal.com/api/v3/analyses/$analysisID" -Method GET -Headers $headers
+                            $response.Content
+                            $pattern = '"status": (.*?),'
+                            $matches = [regex]::Match($response.Content, $pattern, [System.Text.RegularExpressions.RegexOptions]::Singleline)
+                            $status = $matches.Groups[1].Value
+                        }
+                        Until
+                        ($status -eq "`"completed`"")
+
+                        Clear-Variable matches, pattern
+
+
+                        $pattern = '"malicious": (.*?),'
+                        $matches = [regex]::Match($response.Content, $pattern, [System.Text.RegularExpressions.RegexOptions]::Singleline)
+                        $malicious = $matches.Groups[1].Value
+
+                        $pattern = '"suspicious": (.*?),'
+                        $matches = [regex]::Match($response.Content, $pattern, [System.Text.RegularExpressions.RegexOptions]::Singleline)
+                        $suspicious = $matches.Groups[1].Value
+
+                        $pattern = '"undetected": (.*?),'
+                        $matches = [regex]::Match($response.Content, $pattern, [System.Text.RegularExpressions.RegexOptions]::Singleline)
+                        $undetected = $matches.Groups[1].Value
+
+                        $pattern = '"harmless": (.*?),'
+                        $matches = [regex]::Match($response.Content, $pattern, [System.Text.RegularExpressions.RegexOptions]::Singleline)
+                        $harmless = $matches.Groups[1].Value
+
+
+                        $testResult = "В результате проверки множеством сервисов VirusTotal, были получены следующие результаты:`n`nВредоносно: $malicious`nПодозрительно: $suspicious`nНе обнаружено: $undetected`nБезвредно: $harmless`n`n"
+
+                        sendMessage $chatID $testResult
+                    }
+                    else
+                    {
+                        sendMessage $chatID "Не удалось проверить ссылку: `"$testUrl`""
+                    }
+             }
+
+
              #Список почтовых групп конкретного пользователя
              if ($text -match "^(mailgroups) (.*)")
              {
